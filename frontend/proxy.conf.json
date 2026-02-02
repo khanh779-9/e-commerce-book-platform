@@ -1,0 +1,14 @@
+{
+  "/api": {
+    "target": "http://localhost:5132",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "error"
+  },
+  "/uploads": {
+    "target": "http://localhost:5132",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "error"
+  }
+}
