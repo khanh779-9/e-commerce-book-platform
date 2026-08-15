@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: bookzone-db
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${SA_PASSWORD:-YourStrong@Passw0rd}
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - db_data:/var/opt/mssql
+      - ../template_database/db_bookstore_sqlserver.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD:-YourStrong@Passw0rd}" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bookzone-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: bookzone-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bookzone-network
+
+  # SeaweedFS Master
+  seaweedfs-master:
+    image: seaweedfs/seaweedfs:latest
+    container_name: bookzone-seaweedfs-master
+    command: master -port=9333 -volumeSizeLimitMB=30000 -defaultReplication=${SEAWEEDFS_REPLICATION:-001} -metricsPort=9324
+    ports:
+      - "9333:9333"
+      - "9324:9324"
+    volumes:
+      - seaweedfs_master:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9333/dir/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bookzone-network
+
+  # SeaweedFS Volume
+  seaweedfs-volume:
+    image: seaweedfs/seaweedfs:latest
+    container_name: bookzone-seaweedfs-volume
+    command: volume -port=8080 -mserver=seaweedfs-master:9333 -dir=/data -max=5 -publicUrl=http://seaweedfs-volume:8080 -rack=rack1 -dataCenter=dc1
+    ports:
+      - "8888:8080"
+    volumes:
+      - seaweedfs_volume:/data
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    networks:
+      - bookzone-network
+
+  # SeaweedFS Filer (optional - for folder-like operations)
+  seaweedfs-filer:
+    image: seaweedfs/seaweedfs:latest
+    container_name: bookzone-seaweedfs-filer
+    command: filer -master=seaweedfs-master:9333 -port=8888 -metricsPort=9325
+    ports:
+      - "8889:8888"
+      - "9325:9325"
+    depends_on:
+      seaweedfs-master:
+        condition: service_healthy
+    networks:
+      - bookzone-network
+
+  # Backend API
+  api:
+    build:
+      context: ../e-commerce-book-platform
+      dockerfile: Dockerfile
+    container_name: bookzone-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=db;Database=db_nhasach;User=sa;Password=${SA_PASSWORD:-YourStrong@Passw0rd};TrustServerCertificate=True;Encrypt=False
+      - ConnectionStrings__Redis=redis:6379
+      - Jwt__Secret=${JWT_SECRET:-BookZone-Production-Secret-Key-Change-In-Production-2024!}
+      - Jwt__Issuer=ECommerceBookPlatform
+      - Jwt__Audience=ECommerceBookPlatform
+      - Cors__AllowedOrigins__0=https://bookzone.vn
+      - Cors__AllowedOrigins__1=https://www.bookzone.vn
+      - SeaweedFS__MasterUrl=http://seaweedfs-master:9333
+      - SeaweedFS__PublicUrl=https://cdn.bookzone.vn
+      - SeaweedFS__Replication=${SEAWEEDFS_REPLICATION:-001}
+      - Serilog__WriteTo__2__Args__serverUrl=http://seq:5341
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - bookzone-network
+    restart: unless-stopped
+
+  # Frontend (Angular) - served via Nginx
+  frontend:
+    image: nginx:alpine
+    container_name: bookzone-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../e-commerce-book-platform.client:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+    networks:
+      - bookzone-network
+    restart: unless-stopped
+
+  # Seq Logging (optional)
+  seq:
+    image: datalust/seq:latest
+    container_name: bookzone-seq
+    environment:
+      - ACCEPT_EULA=Y
+    ports:
+      - "5341:80"
+    volumes:
+      - seq_data:/data
+    networks:
+      - bookzone-network
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  redis_data:
+  seaweedfs_master:
+  seaweedfs_volume:
+  seq_data:
+
+networks:
+  bookzone-network:
+    driver: bridge
