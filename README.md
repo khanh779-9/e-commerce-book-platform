@@ -1,6 +1,6 @@
 # E-Commerce Book Platform
 
-Hệ thống thương mại điện tử bán sách trực tuyến được xây dựng với kiến trúc monolith tách biệt rõ ràng giữa Backend API và Frontend
+Hệ thống thương mại điện tử bán sách trực tuyến được xây dựng với kiến trúc monolith tách biệt rõ ràng giữa Backend API và Frontend.
 
 ## Kiến trúc hệ thống
 
