@@ -5,7 +5,7 @@ Hệ thống thương mại điện tử bán sách trực tuyến được xây
 ## Kiến trúc hệ thống
 
 ```
-├── backend/          # ASP.NET Core 8 Web API
+├── backend/          # ASP.NET Core 9 Web API
 ├── frontend/         # Angular 18 Application
 ├── deploy/           # Docker Compose & Nginx config
 ├── tests/            # Unit & Integration Tests
@@ -16,7 +16,7 @@ Hệ thống thương mại điện tử bán sách trực tuyến được xây
 
 **Công nghệ:**
 
-- .NET 8 / ASP.NET Core Web API
+- .NET 9 / ASP.NET Core Web API
 - Entity Framework Core (SQL Server)
 - JWT Authentication + Refresh Token
 - Redis Caching (StackExchange.Redis)
@@ -121,7 +121,7 @@ dotnet test
 
 ## Yêu cầu hệ thống
 
-- .NET 8 SDK
+- .NET 9 SDK
 - Node.js 20+ & pnpm
 - SQL Server 2019+
 - Redis 7+
